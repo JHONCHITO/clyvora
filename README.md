@@ -32,6 +32,20 @@ Después reinicia `npm run dev`. El Estudio IA usa la API Responses para texto y
 
 Las tarjetas de TikTok, Instagram y Facebook no marcan una conexión hasta completar OAuth real. Para activarlas hacen falta las credenciales de desarrollador, URLs públicas de retorno y la aprobación de permisos de cada plataforma.
 
+## Conexión directa de TikTok
+
+Clyvora incluye la ruta de inicio `/api/oauth/tiktok/start` y el callback `/api/oauth/tiktok/callback`. El flujo intercambia el código OAuth únicamente en el servidor, cifra los tokens con AES-256-GCM y los guarda en PostgreSQL. No interviene un gestor de redes sociales.
+
+En Vercel configura estas variables de entorno para **Production**, sin copiarlas al repositorio: `DATABASE_URL`, `SOCIAL_TOKEN_ENCRYPTION_KEY`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` y `TIKTOK_REDIRECT_URI`.
+
+Registra exactamente esta URI en Login Kit de TikTok:
+
+```text
+https://clyvora-lac.vercel.app/api/oauth/tiktok/callback
+```
+
+Primero solicita solamente el scope `user.info.basic`; añade `video.list` o `video.publish` únicamente después de que TikTok apruebe su uso.
+
 ## Siguiente arquitectura de producción
 
 1. Autenticación de usuarios y equipos (por ejemplo, Auth.js).

@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AiStudio } from "./components/ai-studio";
 import { AutomationHub } from "./components/automation-hub";
 import { WorkspaceModule } from "./components/workspace-module";
 
 type Network = "TikTok" | "Instagram" | "Facebook";
+
+type Connection = { provider: string; displayName: string | null; avatarUrl: string | null; scopes: string[] };
+type SocialSetup = { database: boolean; tiktok: boolean; meta: boolean };
 
 const networks: { name: Network; handle: string; color: string; status: string }[] = [
   { name: "TikTok", handle: "@tu-cuenta", color: "#e9fcfb", status: "Por conectar" },
@@ -25,11 +28,38 @@ export default function Home() {
   const [published, setPublished] = useState(false);
   const [activeTab, setActiveTab] = useState("Inicio");
   const [draftText, setDraftText] = useState("");
-  const total = 0;
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [socialSetup, setSocialSetup] = useState<SocialSetup>({ database: false, tiktok: false, meta: false });
+  const [socialNotice, setSocialNotice] = useState("");
+  const total = connections.length;
+
+  useEffect(() => {
+    fetch("/api/social/status")
+      .then((response) => response.json())
+      .then((data: { connections?: Connection[]; setup?: SocialSetup }) => {
+        setConnections(data.connections || []);
+        if (data.setup) setSocialSetup(data.setup);
+      })
+      .catch(() => undefined);
+
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("social_error");
+    const connected = params.get("social_connected");
+    if (error) setSocialNotice(error);
+    if (connected === "tiktok") setSocialNotice("TikTok se conectó correctamente.");
+  }, []);
 
   function openDraft(content = "") {
     setDraftText(content);
     setComposerOpen(true);
+  }
+
+  function startConnection(network: Network) {
+    if (network === "TikTok" && socialSetup.tiktok) {
+      window.location.assign("/api/oauth/tiktok/start");
+      return;
+    }
+    setConnectionTarget(network);
   }
 
   return (
@@ -54,6 +84,8 @@ export default function Home() {
           <div className="header-actions"><button className="icon-button" aria-label="Notificaciones">⌁</button><button className="primary" onClick={() => setActiveTab("Estudio IA")}>✦ Crear con IA</button></div>
         </header>
 
+        {socialNotice && <div className="social-notice"><span>⌁</span><p>{socialNotice}</p><button onClick={() => setSocialNotice("")} aria-label="Cerrar aviso">×</button></div>}
+
         {activeTab === "Estudio IA" ? <AiStudio initialBrief={draftText} onCreateDraft={openDraft} /> : activeTab === "Automatizaciones" ? <AutomationHub /> : activeTab !== "Inicio" ? <WorkspaceModule module={activeTab as "Calendario" | "Biblioteca" | "Comunidad" | "Analítica" | "Ajustes"} onNavigate={setActiveTab} /> : <>
         <section className="hero">
           <div><p className="eyebrow">SOCIAL INTELLIGENCE PLATFORM</p><h2>Convierte buenas ideas en una comunidad real.</h2><p>Diseña, adapta y mide tu contenido en un solo lugar. Tú conservas el control de cada publicación.</p><button className="primary light" onClick={() => setActiveTab("Estudio IA")}>Abrir el estudio IA <span>→</span></button></div>
@@ -61,14 +93,14 @@ export default function Home() {
         </section>
 
         <section className="metrics" aria-label="Resumen de rendimiento">
-          <article><span className="metric-icon purple">◒</span><div><p>CUENTAS CONECTADAS</p><strong>{total} <small>/ 3</small></strong><em>Sin autorización todavía</em></div></article>
+          <article><span className="metric-icon purple">◒</span><div><p>CUENTAS CONECTADAS</p><strong>{total} <small>/ 3</small></strong><em>{total ? "Autorizadas por sus dueños" : "Sin autorización todavía"}</em></div></article>
           <article><span className="metric-icon orange">↗</span><div><p>ALCANCE ESTA SEMANA</p><strong>—</strong><em>Se verá tras una conexión real</em></div></article>
           <article><span className="metric-icon pink">♡</span><div><p>INTERACCIONES</p><strong>—</strong><em>Se verá tras una conexión real</em></div></article>
         </section>
 
         <section className="grid">
           <article className="panel connections"><div className="panel-heading"><div><p className="eyebrow">PRIMER PASO</p><h3>Conecta tus perfiles</h3></div><span className="badge">Seguro y oficial</span></div><p className="subcopy">Las conexiones usan la autorización oficial de cada plataforma. Nunca pedimos tu contraseña.</p>
-            <div className="network-list">{networks.map((network) => <div className="network" key={network.name}><span className="network-logo" style={{ background: network.color }}>{network.name === "TikTok" ? "♪" : network.name === "Instagram" ? "◉" : "f"}</span><span><b>{network.name}</b><small>{network.handle} · Sin conectar</small></span><button className="outline" onClick={() => setConnectionTarget(network.name)}>Configurar</button></div>)}</div>
+            <div className="network-list">{networks.map((network) => { const connection = connections.find((item) => item.provider === network.name.toLowerCase()); const available = network.name === "TikTok" ? socialSetup.tiktok : socialSetup.meta; return <div className="network" key={network.name}><span className="network-logo" style={{ background: network.color }}>{network.name === "TikTok" ? "♪" : network.name === "Instagram" ? "◉" : "f"}</span><span><b>{network.name}</b><small>{connection ? connection.displayName || "Cuenta autorizada" : available ? "Lista para autorizar" : "Configuración pendiente"}</small></span><button className={connection ? "connected" : "outline"} onClick={() => startConnection(network.name)}>{connection ? "Conectada ✓" : available ? "Conectar" : "Configurar"}</button></div>; })}</div>
           </article>
 
           <article className="panel calendar"><div className="panel-heading"><div><p className="eyebrow">PRÓXIMAMENTE</p><h3>Tu ritmo de publicación</h3></div><button className="text-button">Ver calendario →</button></div><div className="calendar-days">{["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((day, i) => <div key={day} className={i === 2 ? "day selected" : "day"}><span>{day}</span><b>{13 + i}</b>{i === 2 && <i />}</div>)}</div><div className="empty-calendar"><span>✦</span><b>Aún no hay contenido programado</b><p>Empieza con una idea; Clyvora te ayudará a convertirla en piezas para cada red.</p></div></article>
