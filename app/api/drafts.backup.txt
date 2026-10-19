@@ -1,0 +1,102 @@
+
+import { NextResponse } from "next/server";
+import { createDraft, listDrafts } from "../../lib/server/drafts";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const FORMATS = [
+  "Reel / video corto",
+  "Carrusel",
+  "Publicación con imagen",
+];
+
+const STATUSES = [
+  "Pendiente de revisión",
+  "Listo para programar",
+];
+
+export async function GET() {
+  try {
+    const drafts = await listDrafts();
+
+    return NextResponse.json(
+      { drafts },
+      { headers: { "Cache-Control": "private, no-store" } }
+    );
+  } catch (error) {
+    console.error(
+      "Error consultando borradores:",
+      error instanceof Error ? error.message : "Error desconocido"
+    );
+
+    return NextResponse.json(
+      { error: "No se pudieron consultar los borradores." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  let body: {
+    content?: unknown;
+    format?: unknown;
+    status?: unknown;
+  };
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "La solicitud no contiene JSON válido." },
+      { status: 400 }
+    );
+  }
+
+  if (
+    typeof body.content !== "string" ||
+    !body.content.trim() ||
+    body.content.length > 20000
+  ) {
+    return NextResponse.json(
+      { error: "El contenido es obligatorio y no puede superar 20.000 caracteres." },
+      { status: 400 }
+    );
+  }
+
+  const format =
+    typeof body.format === "string" && FORMATS.includes(body.format)
+      ? body.format
+      : FORMATS[0];
+
+  const status =
+    typeof body.status === "string" && STATUSES.includes(body.status)
+      ? body.status
+      : STATUSES[0];
+
+  try {
+    const draft = await createDraft({
+      content: body.content.trim(),
+      format,
+      status,
+    });
+
+    return NextResponse.json(
+      { ok: true, draft },
+      {
+        status: 201,
+        headers: { "Cache-Control": "private, no-store" },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Error guardando borrador:",
+      error instanceof Error ? error.message : "Error desconocido"
+    );
+
+    return NextResponse.json(
+      { error: "No se pudo guardar el borrador en la base de datos." },
+      { status: 500 }
+    );
+  }
+}
