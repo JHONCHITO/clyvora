@@ -1,66 +1,102 @@
+
 import OpenAI from "openai";
- 
+
 export const runtime = "nodejs";
- 
-type IdeaRequest = { brief?: unknown; platform?: unknown; tone?: unknown };
- 
-function text(value: unknown, limit: number) {
+export const maxDuration = 60;
+
+type ImageRequest = {
+  prompt?: unknown;
+  format?: unknown;
+};
+
+function cleanText(value: unknown, limit: number): string {
   return typeof value === "string" ? value.trim().slice(0, limit) : "";
 }
- 
-function parseIdea(raw: string) {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) return null;
-  try {
-    const data = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
-    const hashtags = Array.isArray(data.hashtags)
-      ? data.hashtags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean).slice(0, 8)
-      : [];
-    const idea = {
-      caption: text(data.caption, 1200),
-      hashtags,
-      imagePrompt: text(data.imagePrompt, 1500),
-      memeTop: text(data.memeTop, 80),
-      memeBottom: text(data.memeBottom, 80),
-    };
-    return idea.caption && idea.imagePrompt ? idea : null;
-  } catch {
-    return null;
-  }
-}
- 
+
 export async function POST(request: Request) {
-  const body = (await request.json()) as IdeaRequest;
-  const brief = text(body.brief, 1500);
-  const platform = text(body.platform, 80);
-  const tone = text(body.tone, 120);
- 
-  if (brief.length < 10) return Response.json({ error: "Describe tu idea con al menos 10 caracteres." }, { status: 400 });
-  if (!process.env.OPENAI_API_KEY) return Response.json({ error: "La IA aún no está configurada en este entorno." }, { status: 503 });
- 
+  let body: ImageRequest;
+
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-5",
-      instructions: [
-        "Eres Clyvora, creador de contenido social original, divertido y responsable.",
-        "Responde SOLO con un objeto JSON válido, sin Markdown ni texto adicional, con exactamente estas claves:",
-        '"caption" (texto listo para publicar, en español, natural para la red indicada, máximo 600 caracteres),',
-        '"hashtags" (lista de 5 hashtags relevantes, sin repetir),',
-        '"imagePrompt" (descripción en español de una escena visual original y llamativa para generar la imagen; sin texto escrito, sin logotipos, sin personas reales ni personajes con derechos de autor),',
-        '"memeTop" (frase corta y graciosa de máximo 60 caracteres para la parte superior de la imagen),',
-        '"memeBottom" (remate corto de máximo 60 caracteres para la parte inferior).',
-        "No prometas seguidores ni resultados, no inventes datos, no uses spam ni tácticas para evadir las políticas de las plataformas.",
-      ].join(" "),
-      input: `Idea: ${brief}\nRed: ${platform || "TikTok"}\nTono: ${tone || "Cercano y experto"}`,
+    body = (await request.json()) as ImageRequest;
+  } catch {
+    return Response.json(
+      { error: "La solicitud no contiene un JSON válido." },
+      { status: 400 }
+    );
+  }
+
+  const prompt = cleanText(body.prompt, 4000);
+  const format = cleanText(body.format, 30).toLowerCase();
+
+  if (prompt.length < 10) {
+    return Response.json(
+      { error: "Escribe una descripción de al menos 10 caracteres." },
+      { status: 400 }
+    );
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return Response.json(
+      { error: "Falta configurar OPENAI_API_KEY en el servidor." },
+      { status: 503 }
+    );
+  }
+
+  try {
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
     });
- 
-    const idea = parseIdea(response.output_text);
-    if (!idea) return Response.json({ error: "La IA devolvió una respuesta que no se pudo leer. Intenta de nuevo." }, { status: 502 });
-    return Response.json({ idea });
+
+    const image = await client.images.generate({
+      model: "gpt-image-1",
+      prompt: [
+        "Crea una imagen original, visualmente atractiva y de alta calidad.",
+        "La imagen debe estar bien compuesta y adaptarse al formato solicitado.",
+        "Si la descripción corresponde a un meme, deja espacio para añadir texto legible posteriormente.",
+        "No añadas marcas de agua ni logotipos inventados.",
+        `Descripción: ${prompt}`,
+      ].join("\n"),
+      size: format === "landscape" ? "1536x1024" :
+            format === "portrait" ? "1024x1536" :
+            "1024x1024",
+    });
+
+    const imageBase64 = image.data?.[0]?.b64_json;
+
+    if (!imageBase64) {
+      return Response.json(
+        { error: "OpenAI no devolvió los datos de la imagen." },
+        { status: 502 }
+      );
+    }
+
+    return Response.json({
+      image: `data:image/png;base64,${imageBase64}`,
+    });
   } catch (error) {
-    console.error("Clyvora idea generation failed", error);
-    return Response.json({ error: "No se pudo generar la idea en este momento. Intenta de nuevo." }, { status: 502 });
+    console.error("Clyvora image generation failed:", error);
+
+    if (error instanceof OpenAI.APIError) {
+      const status = error.status;
+
+      if (status === 401) {
+        return Response.json(
+          { error: "La clave de OpenAI no es válida. Revisa OPENAI_API_KEY." },
+          { status: 502 }
+        );
+      }
+
+      if (status === 429) {
+        return Response.json(
+          { error: "Se alcanzó un límite de uso o de facturación de OpenAI. Revisa tu cuenta." },
+          { status: 429 }
+        );
+      }
+    }
+
+    return Response.json(
+      { error: "No se pudo generar la imagen. Revisa el registro del servidor e inténtalo de nuevo." },
+      { status: 502 }
+    );
   }
 }
