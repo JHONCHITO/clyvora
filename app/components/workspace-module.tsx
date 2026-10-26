@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { VideoLibrary } from "./video-library";
 
 type Module =
   | "Calendario"
@@ -247,6 +248,7 @@ export function WorkspaceModule({ module, onNavigate }: Props) {
               <li>Autoriza y verifica la plataforma antes de publicar.</li>
             </ol>
           </article>
+          <VideoLibrary />
         </div>
       ) : (
         <div className="module-grid">

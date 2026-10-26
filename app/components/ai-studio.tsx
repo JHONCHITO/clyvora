@@ -172,11 +172,13 @@ function CopyStudio({
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [historyNotice, setHistoryNotice] = useState("");
 
   async function generate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setResult("");
+    setHistoryNotice("");
     setIsLoading(true);
 
     try {
@@ -189,6 +191,7 @@ function CopyStudio({
       const data = await readApiResponse<{
         content?: string;
         error?: string;
+        generation?: { reused?: boolean; persisted?: boolean };
       }>(response, "No fue posible generar el contenido.");
 
       if (!data.content) {
@@ -196,6 +199,15 @@ function CopyStudio({
       }
 
       setResult(data.content);
+      if (data.generation?.reused) {
+        setHistoryNotice("Se recuperó la propuesta equivalente de tu historial.");
+      } else if (data.generation?.persisted) {
+        setHistoryNotice("Propuesta guardada en el historial creativo.");
+      } else {
+        setHistoryNotice(
+          "La propuesta no se guardó en historial: configura DATABASE_URL para activar la persistencia."
+        );
+      }
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -348,6 +360,8 @@ function CopyStudio({
         {result && (
           <>
             <pre className="generated-copy">{result}</pre>
+
+            {historyNotice && <p className="field-note">{historyNotice}</p>}
 
             <div className="result-actions">
               <button className="outline" type="button" onClick={copyResult}>

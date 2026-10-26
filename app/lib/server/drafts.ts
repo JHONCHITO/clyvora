@@ -24,7 +24,7 @@ declare global {
   var clyvoraDraftPool: Pool | undefined;
 }
 
-function getPool(): Pool {
+export function getPool(): Pool {
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {

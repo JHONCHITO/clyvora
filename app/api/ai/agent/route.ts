@@ -1,5 +1,5 @@
 
-import OpenAI from "openai";
+import { generateJhonContent, type JhonContext } from "../../../lib/server/jhon";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -41,52 +41,10 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_AGENT_ID) {
-    return Response.json(
-      { error: "Falta configurar OPENAI_API_KEY u OPENAI_AGENT_ID." },
-      { status: 503 }
-    );
-  }
-
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
   try {
-    const events = await client.beta.agents.sessions.create({
-      agent_id: process.env.OPENAI_AGENT_ID,
-      environment: { type: "none" },
-      input: [
-        "Trabaja como asistente de Clyvora.",
-        "Prepara contenido responsable para redes sociales.",
-        `Idea: ${brief}`,
-        `Plataforma: ${platform || "Multiplataforma"}`,
-        `Objetivo: ${objective || "Crear comunidad"}`,
-        `Tono: ${tone || "Cercano y profesional"}`,
-        "Entrega una propuesta de contenido clara y accionable.",
-        "No publiques nada ni ejecutes acciones externas.",
-      ].join("\n"),
-      stream: true,
-    });
-
-    events.withResultCollection();
-
-    for await (const _event of events) {
-      // Consumimos los eventos hasta que finalice la tarea.
-    }
-
-    const result = await events.finalResult();
-
-    if (!result.output_text?.trim()) {
-      return Response.json(
-        { error: "El agente terminó sin devolver texto." },
-        { status: 502 }
-      );
-    }
-
     return Response.json({
-      content: result.output_text,
-      sessionId: result.session_id,
+      agent: "jhon",
+      content: await generateJhonContent({ brief, platform, objective, tone } satisfies JhonContext),
     });
   } catch (error) {
     console.error(
@@ -94,9 +52,8 @@ export async function POST(request: Request) {
       error instanceof Error ? error.message : "Error desconocido"
     );
 
-    return Response.json(
-      { error: "No se pudo ejecutar el agente de Clyvora." },
-      { status: 502 }
-    );
+    const message = error instanceof Error ? error.message : "No se pudo ejecutar el agente jhon.";
+    const status = message.includes("aún no está configurada") ? 503 : 502;
+    return Response.json({ error: message }, { status });
   }
 }

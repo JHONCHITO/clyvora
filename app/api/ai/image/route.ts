@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     });
 
     const image = await client.images.generate({
-      model: "gpt-image-1",
+      model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-1",
       prompt: [
         "Crea una imagen original, visualmente atractiva y bien compuesta.",
         "Adapta la composición al formato solicitado.",

@@ -9,6 +9,7 @@ const PUBLIC_PATHS = new Set([
   "/login",
   "/api/auth/login",
   "/api/oauth/tiktok/callback",
+  "/api/media/videos/upload",
   "/api/health",
 ]);
 
